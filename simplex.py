@@ -1,18 +1,32 @@
-import sys
 import os
 from operacoes_matrizes import *
+
 def le_arquivo():
     try:
-        # Leitura do arquivo txt
-        with open(sys.argv[1], "r") as file:
+        with open('entrada.txt', "r") as file:
             content = file.readlines()
-    except IndexError:
+    except FileNotFoundError as e:
         os.system('cls')
-        raise IndexError("Por favor digite o nome do arquivo ao executar o Simplex!")
-    except FileNotFoundError:
+        print(f"Arquivo de entrada não encontrado: {e}")
+    except Exception as e:
         os.system('cls')
-        raise FileNotFoundError("Arquivo de entrada não encontrado!")
+        print(f"Ocorreu um erro: {e}")    
     return content
+
+def percorre_termo(termo):
+    for i, char in enumerate(termo):
+        if char.isalpha():
+            indice = i
+            break
+    return indice
+
+def verifica_fracoes(coef):
+    if '/' in coef:
+        num, den = coef.split('/') 
+        num = float(num)
+        den = float(den)
+        return float(num/den)
+    return coef
 
 def extrai_coeficientes_fc_objetivo(arquivo):
     try:
@@ -21,24 +35,21 @@ def extrai_coeficientes_fc_objetivo(arquivo):
         contador_variaveis = 0
         _, fc_objetivo = arquivo[0].split('=')
         fc_objetivo = fc_objetivo.strip()
+        
         if '-' in fc_objetivo:
             fc_objetivo = fc_objetivo.replace('-', '+-')
+            
         termos_fc_objetivo = [t.replace(' ', '') for t in fc_objetivo.split('+')]
+        
         for termo in termos_fc_objetivo:
-            if termo == '':
-                continue
-            for i, char in enumerate(termo):
-                if char.isalpha():
-                    idx = i
-                    contador_variaveis += 1
-                    break
-            coeficiente = termo[:idx]
+            indice = percorre_termo(termo)
+            coeficiente = termo[:indice]
+            variavel = termo[indice:]
 
-            if '/' in coeficiente:
-                num, den = coeficiente.split('/') 
-                num = float(num)
-                den = float(den)
-                coeficiente = float(num/den)
+            if 'x' in variavel:
+                contador_variaveis +=1
+
+            coeficiente = verifica_fracoes(coeficiente)
 
             if coeficiente == '':
                 vetor_coeficientes_objetivo.append(1.0)
@@ -46,71 +57,65 @@ def extrai_coeficientes_fc_objetivo(arquivo):
                 vetor_coeficientes_objetivo.append(-1.0)
             else:
                 vetor_coeficientes_objetivo.append(float(coeficiente))
-    except:
-        raise ValueError("Ha um problema com o arquivo de entrada!")
+    except ValueError as e:
+        print(f"Ha um problema com o arquivo de entrada: {e}")
     
     return vetor_coeficientes_objetivo, contador_variaveis
 
 def ajusta_restricoes(arquivo, cont_variaveis):
     qtd_variaveis_folga = cont_variaveis
-    restricoes = [r.strip().replace('-', '+-') for r in arquivo[1:]]
+    restricoes = []
+    
+    for r in arquivo[1:]:
+        r = r.strip().replace('-', '+-')
+        restricoes.append(r)
+        
     restricoes = [r.replace(" ", "") for r in restricoes]
+    
     for i in range(len(restricoes)):
         if ">=" in restricoes[i]:
             qtd_variaveis_folga += 1
-            newstring = restricoes[i].replace(">=", "-x{}=".format(qtd_variaveis_folga))
-            restricoes[i] = newstring
+            tmp = restricoes[i].replace(">=", "-x{}=".format(qtd_variaveis_folga))
+            restricoes[i] = tmp
         if "<=" in restricoes[i]:
             qtd_variaveis_folga += 1
-            newstring = restricoes[i].replace("<=", "+x{}=".format(qtd_variaveis_folga))
-            restricoes[i] = newstring
+            tmp = restricoes[i].replace("<=", "+x{}=".format(qtd_variaveis_folga))
+            restricoes[i] = tmp
+    
     restricoes = [r.replace('-', '+-') for r in restricoes]
+    
     return restricoes, qtd_variaveis_folga
 
 def separa_lados_restricoes(restricoes):
-    lado_esquerdo_restricao = []
-    lado_direito_restricao = []
+    lado_esq_restricao = []
+    lado_dir_restricao = []
+    
     for r in restricoes:
         e, d = r.split('=')
-        lado_esquerdo_restricao.append(e)
-        lado_direito_restricao.append(d)
-    return lado_esquerdo_restricao, lado_direito_restricao
+        lado_esq_restricao.append(e)
+        lado_dir_restricao.append(d)
+        
+    return lado_esq_restricao, lado_dir_restricao
 
-def ajusta_lado_direito_restricao(lado_direito_restricao):
-    for i in range(len(lado_direito_restricao)):
-        if '/' in lado_direito_restricao[i]:
-            num, den = lado_direito_restricao[i].split('/') 
-            num = float(num)
-            den = float(den)
-            lado_direito_restricao[i] = float(num/den)
-    return lado_direito_restricao
-
+def ajusta_lado_direito_restricao(lado_dir_restricao):
+    for i in range(len(lado_dir_restricao)):
+        lado_dir_restricao[i] = verifica_fracoes(lado_dir_restricao[i])
+    return lado_dir_restricao
 
 def cria_matriz(tam_vetor, qtd_variaveis):
     return [[0.0 for _ in range(qtd_variaveis)] for _ in range(tam_vetor)]
 
-def preenche_matriz_restricoes(lado_esquerdo_restricao, qtd_variaveis):
-    matriz_simplex= cria_matriz(len(lado_esquerdo_restricao),qtd_variaveis)
-    for i in range(len(lado_esquerdo_restricao)):
-       #lado_esquerdo_restricao[i] = lado_esquerdo_restricao[i].replace('-','+-')
-       termos_aux = lado_esquerdo_restricao[i].split('+')
+def preenche_matriz_restricoes(lado_esq_restricao, qtd_variaveis):
+    matriz_simplex= cria_matriz(len(lado_esq_restricao),qtd_variaveis)
+    
+    for i in range(len(lado_esq_restricao)):
+       termos_aux = lado_esq_restricao[i].split('+')
        for termo_a in termos_aux:
-        termo_a = termo_a.strip()
-        if termo_a == '':
-            continue
-        for i_a, char_a in enumerate(termo_a):
-            if char_a.isalpha():
-                idx_a = i_a
-                break
-        coeficiente_res = termo_a[:idx_a]
-        variavel_res = termo_a[idx_a:]
+        indice_a = percorre_termo(termo_a)
+        coeficiente_res = termo_a[:indice_a]
+        variavel_res = termo_a[indice_a:]
         indice_var = int(variavel_res[1:])
-
-        if '/' in coeficiente_res:
-            num, den = coeficiente_res.split('/') 
-            num = float(num)
-            den = float(den)
-            coeficiente_res = float(num/den)
+        coeficiente_res = verifica_fracoes(coeficiente_res)
         
         if coeficiente_res == '':
             matriz_simplex[i][indice_var-1] = 1.0
@@ -127,23 +132,25 @@ def tipo_problema(entrada, coef_obj):
     if tipo_prob.startswith('min'):
         for i in range(len(coef_obj)):
             coef_obj[i] = coef_obj[i] * (-1.0)
+    elif tipo_prob.startswith('max'):
+        pass
+    else:
+        raise Exception("Nao foi possivel identificar o tipo da funcao, verifique o arquivo de entrada")
+    
     return coef_obj
 
-    
 def main():
     entrada = le_arquivo()
-    try:
-        coef_obj, qtd_variaveis = extrai_coeficientes_fc_objetivo(entrada)
-        coef_obj = tipo_problema(entrada, coef_obj)
-        restricoes, qtd_variaveis = ajusta_restricoes(entrada, qtd_variaveis)
-        coef_obj[len(coef_obj)+1:] = [0]*(qtd_variaveis - len(coef_obj))
-        esq_rst, dir_rst = separa_lados_restricoes(restricoes)
-        dir_rst = ajusta_lado_direito_restricao(dir_rst)
-        matriz = preenche_matriz_restricoes(esq_rst, qtd_variaveis)
-        print(coef_obj)
-        print(matriz)
-        print(dir_rst)
-    except:
-        raise Exception("Nao foi possivel executar o Simplex")
+    coef_obj, qtd_variaveis = extrai_coeficientes_fc_objetivo(entrada)
+    coef_obj = tipo_problema(entrada, coef_obj)
+    restricoes, qtd_variaveis = ajusta_restricoes(entrada, qtd_variaveis)
+    coef_obj[len(coef_obj)+1:] = [0]*(qtd_variaveis - len(coef_obj))
+    esq_rst, dir_rst = separa_lados_restricoes(restricoes)
+    dir_rst = ajusta_lado_direito_restricao(dir_rst)
+    matriz = preenche_matriz_restricoes(esq_rst, qtd_variaveis)
+    print(coef_obj)
+    print(matriz)
+    print(dir_rst)
+    
 if __name__ == '__main__':
     main()

@@ -1,6 +1,40 @@
 def inversa(matriz_simplex):
-    pass
+    n = len(matriz_simplex)
+    mt_aumentada = [[0.0 for _ in range(n*2)] for _ in range((n))]
 
+    for i in range(n):
+        for j in range(n):
+            mt_aumentada[i][j] = matriz_simplex[i][j]
+        for j in range(n, n*2):
+            mt_aumentada[i][j] = 1 if j == i+n else 0
+
+    for k in range(n):
+        if mt_aumentada[k][k] == 0:
+            encontrou = False
+            for i in range(k+1, n):
+                if mt_aumentada[i][k] != 0:
+                    mt_aumentada[k], mt_aumentada[i] = mt_aumentada[i], mt_aumentada[k]
+                    encontrou = True
+                    break
+            assert encontrou is not False, "Nao é possivel inverter a matriz, pois ela nao é singular"
+
+        pivo = mt_aumentada[k][k]
+        for j in range(k, n*2):
+            mt_aumentada[k][j] /= pivo
+        
+        for i in range(n):
+            if i != k:
+                fator = mt_aumentada[i][k]
+                for j in range(k, n*2):
+                    mt_aumentada[i][j] -= fator * mt_aumentada[k][j]
+
+    mt_inversa = [[0.0 for _ in range(n)] for _ in range((n))]
+    for i in range(n):
+        for j in range(n):
+            mt_inversa[i][j] = mt_aumentada[i][j+n]
+    
+    return mt_inversa
+            
 def determinante(matriz_simplex):
     n = len(matriz_simplex)
     if n == 1:
@@ -32,5 +66,3 @@ def multiplicacao(matriz_a, matriz_b):
                 resultado[i][j] += matriz_a[i][k] * matriz_b[k][j]
     
     return resultado
-
-    
